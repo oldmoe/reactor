@@ -1,0 +1,42 @@
+Reactor
+
+Please welcome Reactor. A new reactor library with the very original name of "Reactor". 
+
+What is a reactor any way?
+
+A reactor library is one that provides an asynchronus event handling mechanism. Ruby already has a couple of those. The most prominent are EventMachine and Rev. Many high performing Ruby applications like Thin and Evented Mongrel are utilizing EventMachine for event handling. Both Rev and EventMachine build atop native reactor implementations written in C or C++. While this ensures high performance it makes some integration aspects with Ruby a bit quirky. Sometimes even at a noticable performance cost.
+
+This is why I thought of building Reactor. A much simpler reactor library in pure Ruby that attempts to use as much of the Ruby built in classes and standard libraries as possible. It only provides a minimal API that does not attempt to be so smart. It differs from EventMachine and Rev in the following aspects.
+
+1 - Pure Ruby, no C or C++ code involved
+2 - Very small (~100 lines of code)
+3 - Uses the vanilla Ruby socket and server implementations
+4 - Decent (high) performance on Ruby 1.9.1
+5 - Ruby threading friendly (naturally)
+6 - You can have multiple reactors running (like Rev and unlike EventMachine)
+
+Usage is simple, here's a simple Echo server that uses Reactor
+
+require 'reactor'
+require 'socket'
+
+reactor = Reactor::Base.new
+server = TCPServer.new("0.0.0.0",8080)
+
+reactor.attach(:read, server) do |server|
+  conn = server.accept
+  conn.write(conn.gets)
+  conn.close
+end
+
+reactor.run # blocking call, will run for ever (no signal handling currently)
+
+The server is a normal Ruby TCPServer. It attaches itself to the reactor and asks to be notified if there is data to be read on the wire. A block is provided that will handle those notifications. Alternatively, the server can implement a notify_readable method that will be fired instead.
+
+Any IO object can be attached to the reactor but it doesn't make much sense to attach actual files since they will block upon reading or writing anyway. Sockets and pipes will work in a non-blocking manner though.
+
+Reactor is using Ruby's IO.select behind the scenes. This limits its ability to scale in comparison to something like EventMachine or Rev which are able to utilize Epoll and Kqueue which scale much better. This is not a major concern though. Most servers listen to a few fds most of the time, which is a bit faster when using select. Besides one can hope that Ruby will be able to use Epoll and Kqueue some day which will translate to direct benefit to Reactor.
+
+Todo
+
+The timers code needs to be reimplemented as a red black tree or a skip list to avoid the current O(n) cost. It works just fine at its current form for a few timers though (tens or even hundreds)
