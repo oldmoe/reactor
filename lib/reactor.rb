@@ -63,33 +63,23 @@ module Reactor
       yield self if block_given?
       loop do
         break unless @running
-        while proc = @next_procs.shift
-          proc.call
-        end
-        t = Time.now
-        @timers.each_key.select{|time|time < t }.each do |t|
-          @timers.delete(t).each{|p|p.call}
-        end
-        update_list(@selectables[:read])
-        update_list(@selectables[:write])      
-        res = IO.select(@selectables[:read][:io_list], @selectables[:write][:io_list], nil, 0.005)
-        if res
-          res[0].each do |io|
-            if io.respond_to? :notify_readable
-              io.notify_readable(self)
-            else
-              @selectables[:read][:callbacks][io.object_id].call(io) if @selectables[:read][:callbacks][io.object_id] 
-            end
-          end
-          res[1].each do |io|
-            if io.respond_to? :notify_writable
-              io.notify_writable(self)
-            else
-              @selectables[:write][:callbacks][io.object_id].call(io) if @selectables[:write][:callbacks][io.object_id]
-            end
-          end
-       end 
+        process_procs
+        run_once
       end
+    end
+    
+    # A single select run, it will fire all expired timers and the callbacks on IO objects
+    # but it will return immediately after that. This is useful if you need to create your
+    # own loop to interleave the IO event notifications with other operations
+    def run_once
+      process_timers
+      update_list(@selectables[:read])
+      update_list(@selectables[:write])      
+      res = IO.select(@selectables[:read][:io_list], @selectables[:write][:io_list], nil, 0.005)
+      if res
+        fire_ios(:read, res[0])
+        fire_ios(:write, res[1])
+      end 
     end
     
     # Stops the reactor loop
@@ -118,6 +108,7 @@ module Reactor
     def attach(mode, ios, &callback)
       selectables = @selectables[mode] || raise("mode is not :read or :write")
       (ios = ios.is_a?(Array) ? ios : [ios]).each do |io|
+        raise "either supply a block or implement notfiy_readable" if callback.nil? && !io.respond_to?(:notify_readable)
         selectables[:ios][io.object_id] = io 
         selectables[:callbacks][io.object_id] = callback if callback
       end
@@ -130,6 +121,7 @@ module Reactor
     def detach(mode, ios)
       selectables = @selectables[mode] || raise("mode is not :read or :write")
       (ios = ios.is_a?(Array) ? ios : [ios]).each do |io|
+        raise "either supply a block or implement notfiy_writable" if callback.nil? && !io.respond_to?(:notify_writable)
         selectables[:ios].delete(io.object_id)
         selectables[:callbacks].delete(io.object_id)
       end
@@ -178,10 +170,36 @@ module Reactor
     def update_list(selectables)
       selectables[:io_list], selectables[:dirty] = selectables[:ios].values, false if selectables[:dirty]
     end
+    
+    def process_procs
+      while proc = @next_procs.shift
+        proc.call
+      end
+    end
+    
+    def process_timers
+      t = Time.now
+      @timers.each_key.select{|time| time < t }.each{|t| @timers.delete(t).each{|p| p.call } }
+    end
+    
+    def fire_ios(mode, ios)
+      ios.each do |io|
+        if io.respond_to? (mode == :read ? :notify_readable : :notify_writable)
+          io.send((mode == :read ? :notify_readable : :notify_writable), self)
+        else
+          @selectables[mode][:callbacks][io.object_id].call(io, self) if @selectables[mode][:callbacks][io.object_id] 
+        end
+      end
+    end
   end
 end 
 
 if __FILE__ == $0
+  trap('INT') do 
+    puts "why did you have to press CTRL+C? why? why?"
+    puts "off to the darkness.. again!"
+    exit    
+  end
   require 'socket'
   port = (ARGV[0] || 3333).to_i
   puts ">> Reactor library version 1.0 ()"
@@ -189,7 +207,7 @@ if __FILE__ == $0
   puts ">> The console will echo everything you type"
   puts ">> At the same time it will *secretly* listen"
   puts ">> to connections on port #{port} and send"
-  puts ">> all that you wrote to whovere asks for it"
+  puts ">> all that you wrote to whoever asks for it"
   puts ">> Have fun.."  
   buffer = ""
   reactor = Reactor::Base.new
