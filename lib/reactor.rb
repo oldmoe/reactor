@@ -184,7 +184,7 @@ module Reactor
     def fire_ios(mode, ios)
       ios.each do |io|
         if io.respond_to? (mode == :read ? :notify_readable : :notify_writable)
-          io.send((mode == :read ? :notify_readable : :notify_writable), self)
+          io.__send__((mode == :read ? :notify_readable : :notify_writable), self)
         else
           @selectables[mode][:callbacks][io.object_id].call(io, self) if @selectables[mode][:callbacks][io.object_id] 
         end
