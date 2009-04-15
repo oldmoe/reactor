@@ -121,7 +121,6 @@ module Reactor
     def detach(mode, ios)
       selectables = @selectables[mode] || raise("mode is not :read or :write")
       (ios = ios.is_a?(Array) ? ios : [ios]).each do |io|
-        raise "either supply a block or implement notfiy_writable" if callback.nil? && !io.respond_to?(:notify_writable)
         selectables[:ios].delete(io.object_id)
         selectables[:callbacks].delete(io.object_id)
       end
