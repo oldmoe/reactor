@@ -19,7 +19,7 @@ module Reactor
   # Rationale
   #
   #  - Reactor libraries are re-implementing every bit of Ruby, 
-  #    I would like to see that effort got to Ruby and its standard library 
+  #    I would like to see that effort go to Ruby and its standard library 
   #  - I needed better integration with some Ruby built in classes.
   #  - Some people consider using EventMachine with Ruby as cheating!
   #
@@ -63,7 +63,6 @@ module Reactor
       yield self if block_given?
       loop do
         break unless @running
-        process_procs
         run_once
       end
     end
@@ -72,14 +71,14 @@ module Reactor
     # but it will return immediately after that. This is useful if you need to create your
     # own loop to interleave the IO event notifications with other operations
     def run_once
-      process_timers
       update_list(@selectables[:read])
-      update_list(@selectables[:write])      
-      res = IO.select(@selectables[:read][:io_list], @selectables[:write][:io_list], nil, 0.005)
-      if res
+      update_list(@selectables[:write])            
+      if res = IO.select(@selectables[:read][:io_list], @selectables[:write][:io_list], nil, 0.005)
         fire_ios(:read, res[0])
         fire_ios(:write, res[1])
       end 
+      process_procs
+      process_timers
     end
     
     # Stops the reactor loop
@@ -108,7 +107,7 @@ module Reactor
     def attach(mode, ios, &callback)
       selectables = @selectables[mode] || raise("mode is not :read or :write")
       (ios = ios.is_a?(Array) ? ios : [ios]).each do |io|
-        raise "either supply a block or implement notfiy_readable" if callback.nil? && !io.respond_to?(:notify_readable)
+        raise "either supply a block or implement notfiy_readable" if callback.nil? && !io.respond_to?("notify_#{mode.to_s[0..3]}able")
         selectables[:ios][io.object_id] = io 
         selectables[:callbacks][io.object_id] = callback if callback
       end
@@ -126,7 +125,6 @@ module Reactor
       end
       selectables[:dirty] = true
     end
-    
       
     # Detach all IO objects of a certain mode from the reactor
     #
@@ -134,6 +132,13 @@ module Reactor
     def detach_all(mode)
       raise("mode is not :read or :write") unless [:read, :write].include? mode
       @selectables[mode] = {:ios => {}, :callbacks => {}, :io_list => []}
+    end
+    
+    # Ask the reactor if an IO object is attached in some mode
+    #
+    # mode can be either :read or :write
+    def attached?(mode, io)
+      @selectables[mode][:ios].include? io
     end
     
     # Add a block of code that will fire after some time 
