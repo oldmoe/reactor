@@ -176,9 +176,8 @@ module Reactor
     end
     
     def process_procs
-      while proc = @next_procs.shift
-        proc.call
-      end
+      length = @next_procs.length
+      length.times { @next_procs.shift.call }
     end
     
     def process_timers
