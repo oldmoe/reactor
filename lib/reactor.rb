@@ -1,3 +1,8 @@
+$:.unshift File.expand_path(File.dirname(__FILE__))
+
+require 'util'
+require 'timer'
+
 module Reactor
   # A small, fast, pure Ruby reactor library
   #
@@ -10,9 +15,8 @@ module Reactor
   #
   # Lacks the following features: 
   #
-  #  - No Epoll or Kqueue support since it relies on Ruby's IO.select
-  #  - No way to cancel timers yet
-  #  - Timers need to be more efficient, currently firing operation is O(n)
+  #  - No Epoll or Kqueue support since it relies on Ruby's IO.select 
+  #      (Yaki Schloba's Ktools can help here)
   #  - While you can have several reactors in several threads you cannot manipulate
   #    a single reactor from multiple threads.
   # 
@@ -45,7 +49,7 @@ module Reactor
     def initialize
       @selectables = {:read => {:dirty=> false, :ios => {}, :callbacks => {}, :io_list => []}, 
                        :write=> {:dirty=> false, :ios => {}, :callbacks => {}, :io_list => []}}
-      @next_procs, @timers, @running = [], {}, false
+      @next_procs, @timers, @running = [], [], false
     end
     
     # Starts the reactor loop
@@ -77,8 +81,8 @@ module Reactor
         fire_ios(:read, res[0])
         fire_ios(:write, res[1])
       end 
-      process_procs
-      process_timers
+      fire_procs
+      fire_timers
     end
     
     # Stops the reactor loop
@@ -91,39 +95,43 @@ module Reactor
       @running = false
     end
     
-    # Attach an IO object (or an array of them) to the reactor.
+    # Attach an IO object to the reactor.
     #
     # mode can be either :read or :write
     #
-    # If a block is provided it will used as the callback to handle the event,
-    # once the event fires the block will be called with the IO object passed
-    # as a block parameter.
+    # A block must be provided and it will be used as the callback to handle the event,
+    # once the event fires the block will be called with the IO object and the reactor
+    # passed as block parameters.
     #
-    # If you supply several IO objects they will all use the same callback block
-    #
-    # Alternatively, if the IO object implements either notify_readable or notify_writable
-    # it will be used instead even if a block was supplied. the reactor itself is sent
-    # as a parameter to these methods
-    def attach(mode, ios, &callback)
+    # A third argument (which defaults to true) tells the method what to do if the IO
+    # object is already attached. If it is set to true (default) then the reactor will
+    # append the new call back till the original caller detaches it. If set to false
+    # then the reactor will just override the old callback with the new one
+
+    def attach(mode, io, wait_if_attached = true, &callback)
       selectables = @selectables[mode] || raise("mode is not :read or :write")
-      (ios = ios.is_a?(Array) ? ios : [ios]).each do |io|
-        raise "either supply a block or implement notfiy_readable" if callback.nil? && !io.respond_to?("notify_#{mode.to_s[0..3]}able")
+      raise "you must supply a callback block" if callback.nil?
+      if wait_if_attached && selectables[:ios][io.object_id]
+        selectables[:callbacks][io.object_id] << callback
+      else
         selectables[:ios][io.object_id] = io 
-        selectables[:callbacks][io.object_id] = callback if callback
+        selectables[:callbacks][io.object_id] = [callback]
+        selectables[:dirty] = true
       end
-      selectables[:dirty] = true
     end
     
-    # Detach an IO object (on an array of them) from the reactor
+    # Detach an IO object from the reactor
     #
     # mode can be either :read or :write
-    def detach(mode, ios)
+    def detach(mode, io)
       selectables = @selectables[mode] || raise("mode is not :read or :write")
-      (ios = ios.is_a?(Array) ? ios : [ios]).each do |io|
+      if selectables[:callbacks][io.object_id].length > 0
+        selectables[:callbacks][io.object_id].shift
+      else
         selectables[:ios].delete(io.object_id)
         selectables[:callbacks].delete(io.object_id)
+        selectables[:dirty] = true
       end
-      selectables[:dirty] = true
     end
       
     # Detach all IO objects of a certain mode from the reactor
@@ -140,26 +148,18 @@ module Reactor
     def attached?(mode, io)
       @selectables[mode][:ios].include? io
     end
-    
-    # Add a block of code that will fire after some time 
-    def add_timer(time, &block)
-      key = Time.now + time
-      if @timers[key]
-       @timers[key] << block
-      else
-       @timers[key] = [block]
-      end
-    end  
-    
+
+    # Add a block of code that will fire after some time
+    def add_timer(time, periodical=false, &block)
+      timer = Timer.new(@timers, time, periodical, &block)
+    end
+
     # Add a block of code that will fire periodically after some time passes
     def add_periodical_timer(time, &block)
-      ptimer = proc do
-        block.call
-        add_timer(time){ ptimer.call }
-      end    
-      add_timer(time){ ptimer.call }
+      add_timer(time, true, &block)
     end
     
+    # Register a block to be called at the next reactor tick
     def next_tick &block
       @next_procs << block
     end
@@ -175,24 +175,21 @@ module Reactor
       selectables[:io_list], selectables[:dirty] = selectables[:ios].values, false if selectables[:dirty]
     end
     
-    def process_procs
+    def fire_procs
       length = @next_procs.length
       length.times { @next_procs.shift.call }
     end
     
-    def process_timers
-      t = Time.now
-      @timers.each_key.select{|time| time < t }.each{|t| @timers.delete(t).each{|p| p.call } }
+    def fire_timers
+      return if @timers.length == 0
+      t = (Time.now.to_f * 1000).to_i
+      while @timers.length > 0 && @timers.first.time_of_fire <= t
+        @timers.shift.fire
+      end
     end
     
     def fire_ios(mode, ios)
-      ios.each do |io|
-        if io.respond_to? (mode == :read ? :notify_readable : :notify_writable)
-          io.__send__((mode == :read ? :notify_readable : :notify_writable), self)
-        else
-          @selectables[mode][:callbacks][io.object_id].call(io, self) if @selectables[mode][:callbacks][io.object_id] 
-        end
-      end
+      ios.each {|io|@selectables[mode][:callbacks][io.object_id][0].call(io, self)}
     end
   end
 end 

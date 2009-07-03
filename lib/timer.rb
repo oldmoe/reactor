@@ -1,4 +1,6 @@
 module Reactor
+  # Timer objects created by Reactor::Base#add_to_timer are instances
+  # of this class. You can call cancel on them to stop them from executing
   class Timer
     include Comparable
   
@@ -19,6 +21,8 @@ module Reactor
       add_to_timers if @periodical
     end
     
+    # Cancels the timer
+    # It will be lazily removed from the timer's list later
     def cancel
       @active = false
     end
