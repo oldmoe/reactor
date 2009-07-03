@@ -123,9 +123,9 @@ module Reactor
     # Detach an IO object from the reactor
     #
     # mode can be either :read or :write
-    def detach(mode, io)
+    def detach(mode, io, force=false)
       selectables = @selectables[mode] || raise("mode is not :read or :write")
-      if selectables[:callbacks][io.object_id].length > 0
+      if !force && selectables[:callbacks][io.object_id].length > 0
         selectables[:callbacks][io.object_id].shift
       else
         selectables[:ios].delete(io.object_id)
