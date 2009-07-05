@@ -107,7 +107,6 @@ module Reactor
     # object is already attached. If it is set to true (default) then the reactor will
     # append the new call back till the original caller detaches it. If set to false
     # then the reactor will just override the old callback with the new one
-
     def attach(mode, io, wait_if_attached = true, &callback)
       selectables = @selectables[mode] || raise("mode is not :read or :write")
       raise "you must supply a callback block" if callback.nil?
@@ -118,6 +117,14 @@ module Reactor
         selectables[:callbacks][io.object_id] = [callback]
         selectables[:dirty] = true
       end
+      @on_attach.call(mode, io) if @on_attach
+    end
+    
+    # Supply a callback to on_attach that will be called
+    # after each attach operation and supplied with
+    # the mode and io object of the attach method
+    def on_attach(&block)
+      @on_attach = block
     end
     
     # Detach an IO object from the reactor
@@ -132,8 +139,16 @@ module Reactor
         selectables[:callbacks].delete(io.object_id)
         selectables[:dirty] = true
       end
+      @on_detach.call(mode, io) if @on_attach
     end
       
+    # Supply a callback to on_detach that will be called
+    # after each detach operation and supplied with
+    # the mode and io object of the detach method
+    def on_detach(&block)
+      @on_detach = block
+    end
+
     # Detach all IO objects of a certain mode from the reactor
     #
     # mode can be either :read or :write
@@ -152,6 +167,15 @@ module Reactor
     # Add a block of code that will fire after some time
     def add_timer(time, periodical=false, &block)
       timer = Timer.new(@timers, time, periodical, &block)
+      @on_add_timer.call(timer) if @on_add_timer
+      timer
+    end
+    
+    # Supply a callback to on_add_timer that will be called
+    # after each add_timer operation and supplied with
+    # the timer object
+    def on_add_timer(&block)
+      @on_add_timer = block
     end
 
     # Add a block of code that will fire periodically after some time passes

@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name     = "reactor"
-  s.version  = "0.2.0"
+  s.version  = "0.2.1"
   s.date     = "2009-07-04"
   s.summary  = "A pure Ruby reactor library"
   s.email    = "oldmoe@gmail.com"
