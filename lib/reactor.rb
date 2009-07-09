@@ -2,6 +2,7 @@ $:.unshift File.expand_path(File.dirname(__FILE__))
 
 require 'util'
 require 'timer'
+require 'thread'
 
 module Reactor
   # A small, fast, pure Ruby reactor library
@@ -49,7 +50,7 @@ module Reactor
     def initialize
       @selectables = {:read => {:dirty=> false, :ios => {}, :callbacks => {}, :io_list => []}, 
                        :write=> {:dirty=> false, :ios => {}, :callbacks => {}, :io_list => []}}
-      @next_procs, @timers, @running = [], [], false
+      @next_procs, @timers, @running = Queue.new, [], false
     end
     
     # Starts the reactor loop
@@ -184,6 +185,7 @@ module Reactor
     end
     
     # Register a block to be called at the next reactor tick
+    # this particular method is thread safe
     def next_tick &block
       @next_procs << block
     end
