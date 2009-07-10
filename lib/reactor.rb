@@ -133,6 +133,7 @@ module Reactor
     # mode can be either :read or :write
     def detach(mode, io, force=false)
       selectables = @selectables[mode] || raise("mode is not :read or :write")
+      return unless selectables[:ios].include?(io.object_id)
       if !force && selectables[:callbacks][io.object_id].length > 1
         selectables[:callbacks][io.object_id].shift
       else
@@ -140,7 +141,7 @@ module Reactor
         selectables[:callbacks].delete(io.object_id)
         selectables[:dirty] = true
       end
-      @on_detach.call(mode, io) if @on_attach
+      @on_detach.call(mode, io) if @on_detach
     end
       
     # Supply a callback to on_detach that will be called
@@ -162,7 +163,7 @@ module Reactor
     #
     # mode can be either :read or :write
     def attached?(mode, io)
-      @selectables[mode][:ios].include? io
+      @selectables[mode][:ios].include? io.object_id
     end
 
     # Add a block of code that will fire after some time
@@ -215,7 +216,12 @@ module Reactor
     end
     
     def fire_ios(mode, ios)
-      ios.each {|io|@selectables[mode][:callbacks][io.object_id][0].call(io, self)}
+      ios.each do |io|  
+        # an io might get detached while we are in this loop
+        # so we just ignore it
+        callback = @selectables[mode][:callbacks][io.object_id]        
+        callback[0].call(io, self) if callback
+      end
     end
   end
 end 
