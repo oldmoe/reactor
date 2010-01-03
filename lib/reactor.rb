@@ -65,7 +65,8 @@ module Reactor
     # the corresponding callbacks are fired and the loop resumes, otherwise it resumes
     # directly
     def run
-      @running = true
+			i = 0      
+			@running = true
       yield self if block_given?
       while @running
         run_once
@@ -80,11 +81,11 @@ module Reactor
       fire_timers
 			process_leftovers
       update_list(@selectables[:read])
-      update_list(@selectables[:write])            
-      if res = IO.select(@selectables[:read][:io_list], @selectables[:write][:io_list], nil, 0.005)
+      update_list(@selectables[:write]) 
+			if res = IO.select(@selectables[:read][:io_list], @selectables[:write][:io_list], nil, 0.005)      
         fire_ios(:write, res[1])
-        fire_ios(:read, res[0])
-      end 
+			  fire_ios(:read, res[0])
+			end 
     end
     
     # Stops the reactor loop

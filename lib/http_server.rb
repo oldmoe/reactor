@@ -2,7 +2,7 @@ require 'tcp_server'
 require 'unicorn_http'
 require 'rack'
 
-class Reactor::HTTPServer < Reactor::TCPServer
+class Reactor::HTTPConnection < Reactor::Connection
 
 	attr_accessor :keepalive
 
@@ -32,14 +32,14 @@ class Reactor::HTTPServer < Reactor::TCPServer
 	def post_init
 		@data = ''
 		@env = {}
-		@parser = HttPParser.new		
+		@parser = ::Unicorn::HttpParser.new		
 		@keepalive = false
     @env[REMOTE_ADDR] = @conn === TCPSocket ? @conn.peeraddr.last : LOCALHOST
 	end
 
 	def data_received(data)
 		@data << data
-		if @data.length > MAx_HEADER
+		if @data.length > MAX_HEADER
 			# we need to log this incident
 			close!
 			return
@@ -50,13 +50,13 @@ class Reactor::HTTPServer < Reactor::TCPServer
 			# but we have the connection in the connections list anyway
 			handle_http_request
 		end
-
 	end
 
 	def handle_http_request
 			# check if file exists
-			f = File.open(@env['path'])
-			send_http_response(200, @env, f.read)				
+			f = File.open(@env['REQUEST_PATH'].sub("/",''))
+			send_http_response(200, @env, f.read)	
+			f.close			
  	end
 
 	# we will attempt to compose the headers and the body
@@ -85,6 +85,7 @@ class Reactor::HTTPServer < Reactor::TCPServer
 			# should I use an external iterator? (yikes!)
 		end	
 		write(response)
+		write(body)
 		finish
  	end
 

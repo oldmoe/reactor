@@ -1,5 +1,5 @@
-require 'rbtree'
 require 'reactor'
+require 'time'
 
 class Reactor::Server
 
@@ -20,7 +20,7 @@ class Reactor::Server
 		@reactor.attach(:read, @socket) do |socket, reactor|
 			begin
 				loop do
-					conn = socket.accept
+					conn = socket.accept_nonblock
 					begin
 						request_handler = @handler_class.new(conn, self, reactor)
 					rescue Exception => e
@@ -38,7 +38,7 @@ class Reactor::Server
 				time = Time.now
 				# loop on all the connections
 				# and remove those that timed out
-				while time - me.connections.first.last_active	>= me.timeout
+				while time - me.connections.first[1].last_active	>= me.timeout
 					id, conn = *(me.connections.shift)
 					conn.close(false)
 				end
