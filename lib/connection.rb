@@ -5,7 +5,6 @@ class Reactor::Connection
 
 	CHUNK_SIZE = 64 * 1024
 	TIMEOUT = 120
-	CHUNK_SIZE = 64 * 1024
 
 	def initialize(conn, server, reactor)
 		@conn, @server, @reactor = conn, server, reactor
@@ -43,6 +42,8 @@ class Reactor::Connection
 	end
 
 	def data_received(data)
+		write(data)
+		close
 	end
 	
 	def do_write
@@ -87,6 +88,7 @@ class Reactor::Connection
 
 	def stream(options)
 		raise "stream already active" if @streaming
+		raise "Cannot stream after scheduling a close" if @close_scheduled
 		@streaming = true
 		@streaming_options = options
 	  do_stream if @write_buffer.empty?
@@ -102,14 +104,19 @@ class Reactor::Connection
 			# instead of trying to copy all at once
 			# we chunk the response, this allows us to avoid
 			# reaping the connection for really large files
-			done = false
-			while !done
-				IO.copy_stream(*@streaming_options)
-			end
-			@reactor.next_tick do
-				@streaming_options = nil
-				@streaming = false
-				close if @close_scheduled
+			begin			
+				done = false
+				src, length, offset = *@streaming_options
+				IO.copy_stream(src, @conn, length, offset)
+				@reactor.next_tick do
+					@streaming_options = nil
+					@streaming = false
+					close if @close_scheduled
+				end
+			rescue Exception => e
+				@reactor.next_tick do
+					close(false)
+				end
 			end			
 		end
 	end	
@@ -126,6 +133,14 @@ class Reactor::Connection
 		end
 	end
 	
+	def persist
+		@persistent = true
+	end
+	
+	def persistent?
+		@persistent
+	end
+
 	def report_activity
 		@last_active = Time.now
 		@server.connections.delete(self.object_id)

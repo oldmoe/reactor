@@ -217,8 +217,8 @@ module Reactor
     end
     
 		def process_leftovers
-			while @ios = @ios.shift
-				@ios[1].call(@ios[0], self)
+			while io = @ios.shift
+				io[1].call(io[0], self)
 			end
 		end    
 

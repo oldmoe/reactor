@@ -4,7 +4,7 @@ require 'server'
 require 'connection'
 
 class Reactor::TCPServer < Reactor::Server
-
+	include Socket::Constants
 	def initialize(options)
 		@socket = if options[:socket]
 								options[:socket]
@@ -20,12 +20,6 @@ class Reactor::TCPServer < Reactor::Server
 		super
 		start		
 	end
-
-	def stream(connection, io)
-	end
-
-	def stream_file(connection, io)
-	end	
 
 end
 

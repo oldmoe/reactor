@@ -12,7 +12,7 @@ class Reactor::Server
 	def initialize(options)
 		@connections = {}
 		@reactor = options[:reactor]
-		@handler_class = options[:handler]
+		@handler_class = options[:handler] || Reactor::Connection
 		@timeout = (options[:timeout] || CONNECTION_TIMEOUT) * 1000 # timeout in milliseconds
 	end
 
@@ -22,7 +22,7 @@ class Reactor::Server
 				loop do
 					conn = socket.accept
 					begin
-						request_handler = @handler_class.new(conn, reactor)
+						request_handler = @handler_class.new(conn, self, reactor)
 					rescue Exception => e
 						puts e # we need to log those errors, may be we are being DDoSed?
 						puts e.backtrace		
@@ -49,6 +49,7 @@ class Reactor::Server
 	def stop!
 		stop
 		@socket.close
+		@connections.each{|c| c.close }
 		@connections = {}
 	end
 
