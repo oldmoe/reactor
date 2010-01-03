@@ -13,13 +13,14 @@ module Reactor
   #  - Attach/detach IO objects for readability and writability notifications
   #  - Add blocks of code that get executed after some time
   #  - Multiple reactors can co-exist (each in a separate thread of course)
+	#	 - OK timer implementation (will move to RBTree in the near future)
   #
   # Lacks the following features: 
   #
   #  - No Epoll or Kqueue support since it relies on Ruby's IO.select 
   #      (Yaki Schloba's Ktools can help here)
   #  - While you can have several reactors in several threads you cannot manipulate
-  #    a single reactor from multiple threads.
+  #    a single reactor from multiple threads (except via the next_proc method).
   # 
   # Rationale
   #
@@ -50,7 +51,7 @@ module Reactor
     def initialize
       @selectables = {:read => {:dirty=> false, :ios => {}, :callbacks => {}, :io_list => []}, 
                        :write=> {:dirty=> false, :ios => {}, :callbacks => {}, :io_list => []}}
-      @next_procs, @timers, @running = Queue.new, [], false
+      @next_procs, @timers, @ios, @running = Queue.new, SortedArray.new, [], false
     end
     
     # Starts the reactor loop
@@ -66,8 +67,7 @@ module Reactor
     def run
       @running = true
       yield self if block_given?
-      loop do
-        break unless @running
+      while @running
         run_once
       end
     end
@@ -76,14 +76,15 @@ module Reactor
     # but it will return immediately after that. This is useful if you need to create your
     # own loop to interleave the IO event notifications with other operations
     def run_once
+      fire_procs
+      fire_timers
+			process_leftovers
       update_list(@selectables[:read])
       update_list(@selectables[:write])            
       if res = IO.select(@selectables[:read][:io_list], @selectables[:write][:io_list], nil, 0.005)
-        fire_ios(:read, res[0])
         fire_ios(:write, res[1])
+        fire_ios(:read, res[0])
       end 
-      fire_procs
-      fire_timers
     end
     
     # Stops the reactor loop
@@ -215,13 +216,20 @@ module Reactor
       end
     end
     
-    def fire_ios(mode, ios)
+		def process_leftovers
+			while @ios = @ios.shift
+				@ios[1].call(@ios[0], self)
+			end
+		end    
+
+		def fire_ios(mode, ios)
+      # an io might get detached while we are in this loop
+      # so we just ignore it
       ios.each do |io|  
-        # an io might get detached while we are in this loop
-        # so we just ignore it
         callback = @selectables[mode][:callbacks][io.object_id]        
-        callback[0].call(io, self) if callback
+				@ios << [io, callback[0]] if callback        
       end
+			process_leftovers
     end
   end
 end 

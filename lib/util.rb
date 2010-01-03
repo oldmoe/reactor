@@ -1,4 +1,4 @@
-class Array
+class SortedArray < Array
   def insert_sorted(value)
     #move across all values
     if self.length == 0
@@ -32,5 +32,3 @@ class Array
     end
   end
 end
-
-
