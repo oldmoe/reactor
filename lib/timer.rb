@@ -29,7 +29,7 @@ module Reactor
 
     def add_to_timers
       @time_of_fire = (Time.now.to_f * 1000).to_i + @time
-      @timers << self      
+      @timers.insert_sorted self      
     end
 
     def <=>(other)
