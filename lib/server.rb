@@ -14,6 +14,7 @@ class Reactor::Server
 		@reactor = options[:reactor]
 		@handler_class = options[:handler] || Reactor::Connection
 		@timeout = (options[:timeout] || CONNECTION_TIMEOUT) * 1000 # timeout in milliseconds
+		#@wdir = options[:wdir] || 
 	end
 
 	def start

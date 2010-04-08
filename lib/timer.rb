@@ -22,9 +22,10 @@ module Reactor
     end
     
     # Cancels the timer
-    # It will be lazily removed from the timers' list later
+    # It will be removed from the list of timers immediately
     def cancel
       @active = false
+			@timers.remove_sorted self
     end
 
     def add_to_timers

@@ -1,7 +1,7 @@
 $:.unshift File.expand_path(File.dirname(__FILE__))
 
-require 'util'
-require 'timer'
+require 'reactor/util'
+require 'reactor/timer'
 require 'thread'
 
 module Reactor

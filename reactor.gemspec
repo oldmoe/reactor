@@ -1,7 +1,7 @@
 Gem::Specification.new do |s|
   s.name     = "reactor"
-  s.version  = "0.2.3"
-  s.date     = "2009-07-10"
+  s.version  = "0.4.0"
+  s.date     = "2010-02-07"
   s.summary  = "A pure Ruby reactor library"
   s.email    = "oldmoe@gmail.com"
   s.homepage = "http://github.com/oldmoe/reactor"
@@ -13,8 +13,8 @@ Gem::Specification.new do |s|
 		"reactor.gemspec", 
 		"README",
 		"lib/reactor.rb",
-		"lib/util.rb",
-		"lib/timer.rb"
+		"lib/reactor/util.rb",
+		"lib/reactor/timer.rb"
 	]
   s.rdoc_options = ["--main", "README"]
   s.extra_rdoc_files = ["README"]
